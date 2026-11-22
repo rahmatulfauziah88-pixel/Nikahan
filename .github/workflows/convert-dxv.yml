@@ -14,13 +14,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Conda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          auto-activate-base: true
+          channels: conda-forge
+          channel-priority: strict
+
       - name: Install tools
         run: |
           sudo apt-get update
           sudo apt-get install -y python3-pip
           python3 -m pip install --break-system-packages gdown
           # Use a recent FFmpeg build that includes the DXV DXT1 encoder.
-          conda install -y -c conda-forge ffmpeg
+          conda install -y ffmpeg
 
       - name: Verify DXV encoder
         run: |
