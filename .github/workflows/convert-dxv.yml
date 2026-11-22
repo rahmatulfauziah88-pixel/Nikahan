@@ -1,0 +1,70 @@
+name: Convert Nikahan videos to DXV
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  convert:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pip
+          python3 -m pip install --break-system-packages gdown
+          # Use a recent FFmpeg build that includes the DXV DXT1 encoder.
+          conda install -y -c conda-forge ffmpeg
+
+      - name: Verify DXV encoder
+        run: |
+          ffmpeg -hide_banner -h encoder=dxv
+          ffmpeg -hide_banner -h encoder=dxv 2>&1 | grep -qi dxt1
+
+      - name: Download source videos from Google Drive
+        env:
+          DRIVE_FOLDER_ID: 17qj8tTGCiiNdMVh1WLxICbHh2m2ivrvJ
+        run: |
+          mkdir -p input output
+          gdown --folder "https://drive.google.com/drive/folders/$DRIVE_FOLDER_ID" -O input --remaining-ok
+
+      - name: Convert videos to DXV DXT1
+        shell: bash
+        run: |
+          shopt -s globstar nullglob
+          count=0
+          while IFS= read -r -d '' file; do
+            case "$file" in
+              *.mp4|*.MP4|*.mov|*.MOV|*.m4v|*.M4V|*.mkv|*.MKV|*.avi|*.AVI|*.webm|*.WEBM)
+                rel="${file#input/}"
+                out="output/${rel%.*}.mov"
+                mkdir -p "$(dirname "$out")"
+                echo "Converting: $file"
+                ffmpeg -hide_banner -y -i "$file" \
+                  -map 0:v:0 -map 0:a? \
+                  -c:v dxv -format dxt1 -pix_fmt rgba \
+                  -c:a aac -b:a 320k \
+                  "$out"
+                count=$((count+1))
+                ;;
+            esac
+          done < <(find input -type f -print0)
+          if [ "$count" -eq 0 ]; then
+            echo "No supported video files were found in the Drive folder."
+            exit 1
+          fi
+          echo "Converted $count video(s)."
+
+      - name: Upload converted videos
+        uses: actions/upload-artifact@v4
+        with:
+          name: Nikahan-DXV-Output
+          path: output/
+          if-no-files-found: error
+          retention-days: 7
